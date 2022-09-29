@@ -70,6 +70,23 @@ public class TestController {
         }
     }
 
+    @GetMapping("/structuredConcurrencyHandledErr")
+    public ResponseEntity<?> structuredConcurrencyHandledErr() {
+        final Token token = NewRelic.getAgent().getTransaction().getToken();
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            Future<Position> p1Future = scope.fork(() -> waitAndGetPosition(token,3, 4));
+            Future<Position> p2Future = scope.fork(() -> waitAndThrowError(token));
+            scope.join();
+            scope.throwIfFailed();
+            var path = new Path(p1Future.get(), p2Future.get());
+            return new ResponseEntity<>(path, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(e, HttpStatus.INTERNAL_SERVER_ERROR);
+        } finally {
+            token.expire();
+        }
+    }
+
     @GetMapping("/structuredConcurrencyFail")
     public ResponseEntity<?> structuredConcurrencyFail() {
         final Token token = NewRelic.getAgent().getTransaction().getToken();
