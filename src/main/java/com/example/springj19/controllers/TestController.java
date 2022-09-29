@@ -147,7 +147,11 @@ public class TestController {
         };
     }
 
-    private <T> T pass(T val) { return val; }
+    private <T> T pass(T val) {
+        Segment segment = NewRelic.getAgent().getTransaction().startSegment("pass");
+        segment.end();
+        return val;
+    }
 
     private String patternMatchResponse(Object obj) {
         return switch (obj) {
