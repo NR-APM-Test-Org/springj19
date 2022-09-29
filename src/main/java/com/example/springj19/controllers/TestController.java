@@ -1,5 +1,9 @@
 package com.example.springj19.controllers;
 
+import com.newrelic.api.agent.NewRelic;
+import com.newrelic.api.agent.Segment;
+import com.newrelic.api.agent.Token;
+import com.newrelic.api.agent.Trace;
 import jdk.incubator.concurrent.StructuredTaskScope;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -52,46 +56,62 @@ public class TestController {
 
     @GetMapping("/structuredConcurrencySuccess")
     public Path structuredConcurrencySuccess() {
+        final Token token = NewRelic.getAgent().getTransaction().getToken();
         try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-            Future<Position> p1Future = scope.fork(() -> waitAndGetPosition(3, 4));
-            Future<Position> p2Future = scope.fork(() -> waitAndGetPosition(3, 4));
+            Future<Position> p1Future = scope.fork(() -> waitAndGetPosition(token, 3, 4));
+            Future<Position> p2Future = scope.fork(() -> waitAndGetPosition(token, 6, 8));
             scope.join();
             scope.throwIfFailed();
             return new Path(p1Future.get(), p2Future.get());
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            token.expire();
         }
     }
 
     @GetMapping("/structuredConcurrencyFail")
     public ResponseEntity<?> structuredConcurrencyFail() {
+        final Token token = NewRelic.getAgent().getTransaction().getToken();
         try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-            Future<Position> p1Future = scope.fork(() -> waitAndGetPosition(3, 4));
-            Future<Position> p2Future = scope.fork(this::waitAndThrowError);
+            Future<Position> p1Future = scope.fork(() -> waitAndGetPosition(token,3, 4));
+            Future<Position> p2Future = scope.fork(() -> waitAndThrowError(token));
             scope.join();
             scope.throwIfFailed();
             var path = new Path(p1Future.get(), p2Future.get());
             return new ResponseEntity<>(path, HttpStatus.OK);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            token.expire();
         }
     }
 
-    private Position waitAndGetPosition(int x, int y) {
+    @Trace(async = true)
+    private Position waitAndGetPosition(Token token, int x, int y) {
+        token.link();
+        Segment segment = NewRelic.getAgent().getTransaction().startSegment("waitAndGetPosition");
         try {
             Thread.sleep(1000);
             return new Position(x, y);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            segment.end();
         }
     }
 
-    private Position waitAndThrowError() {
+    @Trace(async = true)
+    private Position waitAndThrowError(Token token) {
+        token.link();
+        Segment segment = NewRelic.getAgent().getTransaction().startSegment("waitAndThrowError");
         try {
             Thread.sleep(1000);
             throw new CustomException("Expected error");
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            segment.end();
         }
     }
 
