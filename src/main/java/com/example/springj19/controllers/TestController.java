@@ -81,7 +81,7 @@ public class TestController {
             var path = new Path(p1Future.get(), p2Future.get());
             return new ResponseEntity<>(path, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(e, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(e, HttpStatus.BAD_REQUEST);
         } finally {
             token.expire();
         }
